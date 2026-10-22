@@ -67,8 +67,8 @@
     if (query.has("ref")) { const url = new URL(location.href); url.searchParams.delete("ref"); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`); }
   }
   function affiliateRef() { const saved = read(attributionKey); return saved && affiliatePattern.test(saved.ref || "") && Number.isFinite(saved.expiresAt) && saved.expiresAt > Date.now() && saved.expiresAt <= Date.now() + 30 * 86400000 ? saved.ref : ""; }
-  function selectedPlan() { const value = new URLSearchParams(location.hash.split("?")[1] || "").get("plan"); return ["basic", "complete"].includes(value) ? value : ""; }
-  function safeReturnHash(hash) { return /^#hotmart(?:\?plan=(?:basic|complete))?$/.test(hash || "") ? hash : ""; }
+  function selectedPlan() { const value = new URLSearchParams(location.hash.split("?")[1] || "").get("plan"); return ["basic", "intermediate", "complete"].includes(value) ? value : ""; }
+  function safeReturnHash(hash) { return /^#hotmart(?:\?plan=(?:basic|intermediate|complete))?$/.test(hash || "") ? hash : ""; }
   function rememberReturn() { if (!isDemo() && !isPlay() && onPage()) write(returnKey, { hash: selectedPlan() ? `#hotmart?plan=${selectedPlan()}` : "#hotmart", expiresAt: Date.now() + 15 * 60000 }); }
   function restoreReturn() {
     if (!user() || isPlay() || isDemo() || initialHash || location.hash || routeTouched) return;
@@ -81,7 +81,7 @@
     if (state.owner !== owner) {
       state = emptyState(owner);
       const saved = read(pendingKey);
-      if (owner && saved?.owner === owner && uuid.test(saved.requestKey || "") && ["basic", "complete"].includes(saved.planId) && ["pt-BR", "en", "es"].includes(saved.locale)) state.reference = { owner, requestKey: saved.requestKey, planId: saved.planId, locale: saved.locale, id: uuid.test(saved.id || "") ? saved.id : "", affiliateRef: affiliatePattern.test(saved.affiliateRef || "") ? saved.affiliateRef : "" };
+      if (owner && saved?.owner === owner && uuid.test(saved.requestKey || "") && ["basic", "intermediate", "complete"].includes(saved.planId) && ["pt-BR", "en", "es"].includes(saved.locale)) state.reference = { owner, requestKey: saved.requestKey, planId: saved.planId, locale: saved.locale, id: uuid.test(saved.id || "") ? saved.id : "", affiliateRef: affiliatePattern.test(saved.affiliateRef || "") ? saved.affiliateRef : "" };
       else if (saved) write(pendingKey, null);
     }
     restoreReturn();
@@ -93,7 +93,7 @@
   }
   function normalizeCheckout(result) {
     const value = result?.checkout;
-    if (!value || !uuid.test(value.id || "") || !["basic", "complete"].includes(value.planId) || !["created", "pending", "approved", "cancelled", "expired", "rejected", "refunded", "charged_back", "needs_attention"].includes(value.status)) throw Error(t("invalid"));
+    if (!value || !uuid.test(value.id || "") || !["basic", "intermediate", "complete"].includes(value.planId) || !["created", "pending", "approved", "cancelled", "expired", "rejected", "refunded", "charged_back", "needs_attention"].includes(value.status)) throw Error(t("invalid"));
     const url = value.url ? checkoutUrl(value.url) : "";
     if (value.url && !url) throw Error(t("invalid"));
     return { id: value.id, planId: value.planId, status: value.status, url, expiresAt: value.expiresAt || null };
@@ -113,15 +113,14 @@
     const plan = hooks.getSession?.().plans?.find(item => item.id === planId);
     if (!plan) return "";
     const features = [];
-    if (plan.limit === null) features.push(i18n.t("plans.unlimited"));
-    else if (Number.isSafeInteger(plan.limit) && plan.limit > 0) features.push(i18n.t("plans.generations", { count: plan.limit }));
+    if (Number.isSafeInteger(plan.limit) && plan.limit >= 0) features.push(i18n.t(plan.period === "day" ? "plans.generationsDay" : "plans.generations", { count: plan.limit }));
     if (Number.isFinite(plan.maxDuration) && plan.maxDuration > 0) features.push(i18n.t("plans.duration", { seconds: plan.maxDuration }));
     return features.length ? `<ul class="hotmart-plan-details">${features.map(value => `<li>${escape(value)}</li>`).join("")}</ul>` : "";
   }
   function markup() {
     if (isPlay()) return `<section id="hotmart-page" class="panel hotmart-page"><h1>Somora</h1><p>${t("play")}</p><button class="button primary" data-screen="plans">${i18n.t("nav.plans")}</button></section>`;
     const sessionUser = user(), chosen = selectedPlan();
-    return `<section id="hotmart-page" class="hotmart-page"><section class="page-intro compact"><div><div class="eyebrow"><span></span>${t("channel")}</div><h1>${t("title")}</h1><p>${t("intro")}</p><p class="hotmart-features">${t("features")}</p></div></section><section class="panel hotmart-notice"><p>${t("notice")}</p>${sessionUser ? `<p><strong>${escape(sessionUser.name)}</strong> · ${escape(sessionUser.email)}</p>` : `<button type="button" class="button primary" data-hotmart="login">${t("login")}</button>`}<p class="input-help">${t("recurring")}</p><p class="input-help">${t("rights")} <a href="${escape(termsUrl())}">${t("terms")}</a></p>${sessionUser && !sessionUser.emailVerified ? `<p class="hotmart-feedback">${t("verify")}</p>` : ""}${sessionUser && ["basic", "complete"].includes(sessionUser.plan) ? `<p class="input-help">${escape(i18n.t("plans.existing"))}</p>` : ""}</section><div class="hotmart-feedback" role="status">${escape(isDemo() ? t("demo") : state.error || configError || (configLoading ? t("wait") : config?.enabled ? "" : t("disabled")))}</div>${config?.enabled && !isDemo() ? `<div class="hotmart-plans">${config.plans.map(plan => `<article class="panel hotmart-plan ${chosen === plan.id ? "selected" : ""}"><h2>${escape(i18n.planName(plan.id))}</h2><p class="hotmart-price">${escape(price(plan.amountCents))} <span>${t("monthly")}</span></p>${planDetails(plan.id)}<button type="button" class="button primary" data-hotmart="buy" data-hotmart-plan="${plan.id}" ${state.busy || sessionUser && !sessionUser.emailVerified ? "disabled" : ""}>${state.busy ? t("wait") : t("buy")}</button></article>`).join("")}</div>` : ""}${!isDemo() && sessionUser ? checkoutMarkup() : ""}<div class="hotmart-actions"><a class="button secondary" href="${escape(hooks.studioUrl?.() || "https://somora.media/#estudio")}">${i18n.t("common.openStudio")}</a>${sessionUser ? `<button class="button secondary" data-screen="account">${i18n.t("nav.account")}</button>` : ""}</div></section>`;
+    return `<section id="hotmart-page" class="hotmart-page"><section class="page-intro compact"><div><div class="eyebrow"><span></span>${t("channel")}</div><h1>${t("title")}</h1><p>${t("intro")}</p><p class="hotmart-features">${t("features")}</p></div></section><section class="panel hotmart-notice"><p>${t("notice")}</p>${sessionUser ? `<p><strong>${escape(sessionUser.name)}</strong> · ${escape(sessionUser.email)}</p>` : `<button type="button" class="button primary" data-hotmart="login">${t("login")}</button>`}<p class="input-help">${t("recurring")}</p><p class="input-help">${t("rights")} <a href="${escape(termsUrl())}">${t("terms")}</a></p>${sessionUser && !sessionUser.emailVerified ? `<p class="hotmart-feedback">${t("verify")}</p>` : ""}${sessionUser && ["basic", "intermediate", "complete"].includes(sessionUser.plan) ? `<p class="input-help">${escape(i18n.t("plans.existing"))}</p>` : ""}</section><div class="hotmart-feedback" role="status">${escape(isDemo() ? t("demo") : state.error || configError || (configLoading ? t("wait") : config?.enabled ? "" : t("disabled")))}</div>${config?.enabled && !isDemo() ? `<div class="hotmart-plans">${config.plans.map(plan => `<article class="panel hotmart-plan ${chosen === plan.id ? "selected" : ""}"><h2>${escape(i18n.planName(plan.id))}</h2><p class="hotmart-price">${escape(price(plan.amountCents))} <span>${t("monthly")}</span></p>${planDetails(plan.id)}<button type="button" class="button primary" data-hotmart="buy" data-hotmart-plan="${plan.id}" ${state.busy || sessionUser && !sessionUser.emailVerified ? "disabled" : ""}>${state.busy ? t("wait") : t("buy")}</button></article>`).join("")}</div>` : ""}${!isDemo() && sessionUser ? checkoutMarkup() : ""}<div class="hotmart-actions"><a class="button secondary" href="${escape(hooks.studioUrl?.() || "https://somora.media/#estudio")}">${i18n.t("common.openStudio")}</a>${sessionUser ? `<button class="button secondary" data-screen="account">${i18n.t("nav.account")}</button>` : ""}</div></section>`;
   }
   function accountPanel() {
     if (!user() || isPlay() || isDemo()) return "";
@@ -134,7 +133,7 @@
     try {
       const result = await hooks.request("/api/billing/hotmart/config");
       if (!result || typeof result.enabled !== "boolean" || result.enabled && (result.currency !== "BRL" || !Array.isArray(result.plans))) throw Error(t("invalid"));
-      const plans = result.enabled ? result.plans.filter(plan => ["basic", "complete"].includes(plan?.id) && Number.isSafeInteger(plan.amountCents) && plan.amountCents > 0 && plan.recurring === true) : [];
+      const plans = result.enabled ? result.plans.filter(plan => ["basic", "intermediate", "complete"].includes(plan?.id) && Number.isSafeInteger(plan.amountCents) && plan.amountCents > 0 && plan.recurring === true) : [];
       if (result.enabled && (!plans.length || plans.length !== result.plans.length || new Set(plans.map(plan => plan.id)).size !== plans.length)) throw Error(t("invalid"));
       config = { enabled: result.enabled, plans }; configFetched = Date.now(); configError = "";
     } catch (error) { config = null; configError = errorText(error); configFetched = Date.now(); }
@@ -156,8 +155,8 @@
       const result = await hooks.request("/api/billing/hotmart/subscriptions");
       if (!live(run)) return;
       if (!Array.isArray(result?.subscriptions)) throw Error(t("invalid"));
-      run.subscriptions = result.subscriptions.filter(row => row && ["basic", "complete"].includes(row.planId) && typeof row.status === "string").map(row => ({ planId: row.planId, status: row.status, planExpiresAt: row.planExpiresAt || null }));
-      run.orders = (Array.isArray(result.orders) ? result.orders : []).filter(row => row && ["basic", "complete"].includes(row.planId) && Number.isSafeInteger(row.amountCents) && row.amountCents >= 0 && row.currency === "BRL").map(row => ({ planId: row.planId, status: row.status, amountCents: row.amountCents, approvedAt: row.approvedAt || null }));
+      run.subscriptions = result.subscriptions.filter(row => row && ["basic", "intermediate", "complete"].includes(row.planId) && typeof row.status === "string").map(row => ({ planId: row.planId, status: row.status, planExpiresAt: row.planExpiresAt || null }));
+      run.orders = (Array.isArray(result.orders) ? result.orders : []).filter(row => row && ["basic", "intermediate", "complete"].includes(row.planId) && Number.isSafeInteger(row.amountCents) && row.amountCents >= 0 && row.currency === "BRL").map(row => ({ planId: row.planId, status: row.status, amountCents: row.amountCents, approvedAt: row.approvedAt || null }));
       run.loaded = true; run.fetched = Date.now();
       if (run.reference?.id && (force || Date.now() - run.checkoutFetched > 15000)) await refreshCheckout(run);
     } catch (error) { if (live(run)) { run.error = errorText(error); run.fetched = Date.now(); } }

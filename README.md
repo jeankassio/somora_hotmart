@@ -8,7 +8,7 @@ HTML, CSS e JavaScript estáticos, sem framework, dependências de execução ou
 
 1. O visitante chega ao portal pela página do produto ou HotLink. O `ref` nativo da Hotmart é preservado separadamente no `sessionStorage` deste subdomínio; nunca vira uma indicação interna do Somora.
 2. Entra com sua conta Somora existente (e-mail ou Google) ou cria uma conta gratuita. O login Google usa o contexto fechado `context=hotmart`; a API só retorna à URL configurada pelo operador.
-3. Confirma o e-mail, escolhe Básico ou Completo e solicita explicitamente um checkout. Preços, moeda, recorrência e disponibilidade vêm da API, sem valores de demonstração.
+3. Confirma o e-mail, escolhe Básico, Intermediário ou Completo e solicita explicitamente um checkout. Preços, moeda, recorrência e disponibilidade vêm da API, sem valores de demonstração.
 4. O checkout é criado pela API e vinculado à conta por uma referência opaca. O navegador abre somente URLs HTTPS de `pay.hotmart.com`, validadas novamente no cliente.
 5. Depois de pagar, o usuário volta e verifica o pagamento. Somente os eventos e a validação do servidor ativam o plano. Retornar da Hotmart, abrir um link ou mudar um parâmetro não libera acesso.
 6. A conta mostra assinaturas e histórico da Hotmart, com um link fixo para a área oficial de compras. O botão **Abrir o Somora** leva ao Estúdio original, usando a mesma sessão autenticada da API.
@@ -46,3 +46,7 @@ node --test tests/*.test.mjs
 ```
 
 Os testes verificam afiliação, login/retorno, ausência de POST automático, validação de URL, troca de conta durante requisições, recuperação idempotente, checkout expirado, respostas inválidas, idioma e configuração desativada. Não substituem um teste ponta a ponta do webhook no ambiente publicado.
+
+## Planos com cota definida
+
+O portal reconhece Básico, Intermediário e Completo (Full em inglês), com a quantidade e o período recebidos da API. Não anuncia gerações ilimitadas. Somente ofertas Hotmart configuradas aparecem para compra; uma oferta Intermediário ausente nunca usa o checkout de outro plano. Cadastre a oferta na Hotmart e configure os parâmetros HOTMART_INTERMEDIATE_* na API para disponibilizá-la neste canal.

@@ -13,7 +13,7 @@ const checkout = (value = {}) => ({ checkout: { id: checkoutId, planId: 'basic',
 
 function setup({ guest = false, verified = true, language = 'en-US', hash = '#hotmart', search = '', storage = new Map(), play = false, demo = false, blocked = false, request } = {}) {
   const calls = [], auth = [], listeners = new Map(), location = new URL(`https://hotmart.somora.media/${search}${hash}`);
-  let session = { user: guest ? null : { ...customer, emailVerified: verified }, plans: [{ id: 'basic', limit: 100, maxDuration: 180 }, { id: 'complete', limit: null, maxDuration: 180 }] }, page = hash === '#conta' ? 'account' : 'hotmart';
+  let session = { user: guest ? null : { ...customer, emailVerified: verified }, plans: [{ id: 'basic', limit: 100, maxDuration: 180 }, { id: 'intermediate', limit: 200, period: 'month', maxDuration: 180 }, { id: 'complete', limit: 400, period: 'month', maxDuration: 180 }] }, page = hash === '#conta' ? 'account' : 'hotmart';
   const document = { querySelector: () => null, addEventListener(name, fn) { const rows = listeners.get(name) || []; rows.push(fn); listeners.set(name, rows); } };
   const window = { location, SOMORA_CONFIG: { IS_HOTMART_PORTAL: true }, navigator: { language, languages: [language] },
     sessionStorage: { getItem(key) { if (blocked) throw Error('blocked'); return storage.get(key) || null; }, setItem(key, value) { if (blocked) throw Error('blocked'); storage.set(key, value); }, removeItem(key) { if (blocked) throw Error('blocked'); storage.delete(key); } },
@@ -165,4 +165,23 @@ test('standalone entry has local assets, legal identity and a closed Google cont
   assert.match(portal, /auth\/google\?context=hotmart&lang=/); assert.match(portal, /credentials: "include"/); assert.match(portal, /CNPJ 49\.553\.853\/0001-40/);
   assert.doesNotMatch(index + portal, /sdk\.mercadopago|billing\.js|android\.js|\/api\/billing\/subscriptions|\/api\/billing\/checkouts/);
   for (const path of ['./config.js', './i18n.js', './hotmart.js', './portal.js', './styles.css', './hotmart.css', './assets/favicon.png', './assets/dm-sans-latin.woff2']) assert(read(path).length > 0);
+});
+
+
+test('intermediate uses its own Hotmart checkout and Full has a finite song allowance', async () => {
+  const f = setup({request:async(path,options={})=>{
+    if(path.endsWith('/config'))return {...config,plans:[...config.plans,{id:'intermediate',amountCents:7990,recurring:true}]};
+    if(path.endsWith('/subscriptions'))return {subscriptions:[],orders:[]};
+    if(path.endsWith('/checkouts')){const body=JSON.parse(options.body);assert.equal(body.planId,'intermediate');return checkout({planId:'intermediate',amountCents:7990});}
+    throw Error('unexpected fixture path');
+  }});
+  await f.api.mount();assert.match(f.api.markup(),/Intermediate/);assert.match(f.api.markup(),/400 music generations per month/);assert.doesNotMatch(f.api.markup(),/Unlimited|>Complete</);
+  await f.internals.buy('intermediate');assert.equal(f.calls.filter(row=>row.method==='POST').length,1);
+  assert.equal(f.calls.find(row=>row.method==='POST').body.planId,'intermediate');
+  for(const [language,label]of[['en','Full'],['pt-BR','Completo'],['es','Completo']]){f.language.setLanguage(language);assert.equal(f.language.planName('complete'),label);}
+});
+
+test('an intermediate offer missing from Hotmart is not replaced by a different plan', async () => {
+  const f=setup();await f.api.mount();await f.internals.buy('intermediate');
+  assert.equal(f.calls.filter(row=>row.method==='POST').length,0);
 });
